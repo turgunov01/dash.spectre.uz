@@ -289,6 +289,8 @@ export interface Order {
   carId?: number | null
   car?: Car | null
   plate?: string | null
+  make?: string | null
+  model?: string | null
   clientId?: number | null
   client?: Client | null
   clientName?: string | null

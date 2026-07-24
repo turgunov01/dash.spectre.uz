@@ -46,6 +46,10 @@ export function useOrdersApi() {
 
     setStatus: (id: number, status: OrderStatus, comment?: string) =>
       api<ApiItem<Order>>(`/orders/${id}/status`, { method: 'POST', body: { status, comment } }).then(r => r.data),
+    // Undo an accidental cancel (owner / accountant). Money is untouched — the
+    // restored order is paid later through the normal cash flow.
+    restore: (id: number, status: OrderStatus, comment?: string) =>
+      api<ApiItem<Order>>(`/orders/${id}/restore`, { method: 'POST', body: { status, comment } }).then(r => r.data),
     assign: (id: number, washerId: number) =>
       api<ApiItem<Order>>(`/orders/${id}/assign`, { method: 'POST', body: { washerId } }).then(r => r.data),
     take: (id: number) => api<ApiItem<Order>>(`/orders/${id}/take`, { method: 'POST' }).then(r => r.data),

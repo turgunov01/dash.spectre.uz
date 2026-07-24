@@ -11,14 +11,32 @@ const toast = useToast()
 const { orders, connected, error } = useQueue()
 
 const canWrite = computed(() => auth.can('orders.write'))
+const isOwner = computed(() => auth.role === 'OWNER')
 const canCreate = computed(() => auth.can('orders.create'))
 const canAssign = computed(() => auth.can('orders.assign'))
 const canTake = computed(() => auth.can('orders.take'))
 
+const carLabel = (o: Order) =>
+  [o.make ?? o.car?.make, o.model ?? o.car?.model].filter(Boolean).join(' ')
+
+const search = ref('')
+
+const matchesSearch = (o: Order) => {
+  const q = search.value.trim().toLowerCase()
+  if (!q) return true
+  const plate = (o.plate || o.car?.plate || '').toLowerCase()
+  const washer = (o.assignedWasher?.name || o.assignedWasher?.email || '').toLowerCase()
+  const car = carLabel(o).toLowerCase()
+  const num = String(o.number ?? o.id)
+  return plate.includes(q) || washer.includes(q) || car.includes(q) || num.includes(q)
+}
+
 const columns = computed(() =>
   QUEUE_STATUSES.map(status => ({
     status,
-    items: orders.value.filter(o => o.status === status).sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
+    items: orders.value
+      .filter(o => o.status === status && matchesSearch(o))
+      .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
   })))
 
 const busy = ref<number | null>(null)
@@ -63,6 +81,25 @@ onMounted(async () => {
           <UDashboardSidebarCollapse />
         </template>
         <template #right>
+          <UInput
+            v-model="search"
+            icon="i-lucide-search"
+            placeholder="Поиск по номеру машины…"
+            size="sm"
+            class="w-56"
+            :ui="{ trailing: 'pe-1' }"
+          >
+            <template v-if="search" #trailing>
+              <UButton
+                color="neutral"
+                variant="link"
+                size="sm"
+                icon="i-lucide-x"
+                aria-label="Очистить"
+                @click="search = ''"
+              />
+            </template>
+          </UInput>
           <UBadge
             :color="connected ? 'success' : 'neutral'"
             variant="subtle"
@@ -104,9 +141,10 @@ onMounted(async () => {
               :key="o.id"
               class="rounded-lg border border-default bg-default p-3 flex flex-col gap-2"
             >
-              <div class="flex items-center justify-between">
-                <NuxtLink :to="`/orders/${o.id}`" class="font-semibold text-highlighted hover:text-primary">
+              <div class="flex items-center justify-between gap-2">
+                <NuxtLink :to="`/orders/${o.id}`" class="font-semibold text-highlighted hover:text-primary truncate">
                   {{ o.plate || o.car?.plate || `#${o.number || o.id}` }}
+                  <span v-if="carLabel(o)" class="font-normal text-muted">· {{ carLabel(o) }}</span>
                 </NuxtLink>
                 <UBadge v-if="o.position" color="neutral" variant="soft" size="sm" :label="`№${o.position}`" />
               </div>
@@ -159,7 +197,7 @@ onMounted(async () => {
                   @update:model-value="(v) => assignTo(o, v)"
                 />
                 <UButton
-                  v-for="next in (canWrite ? statusTransitions(o.status) : [])"
+                  v-for="next in (canWrite ? statusTransitions(o.status).filter(s => isOwner || s !== 'IN_PROGRESS') : [])"
                   :key="next"
                   size="xs"
                   :color="next === 'CANCELLED' ? 'error' : 'neutral'"

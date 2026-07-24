@@ -23,6 +23,8 @@ const canRefund = computed(() => auth.can('orders.refund'))
 const canDiscount = computed(() => auth.can('discounts.apply'))
 const canAssign = computed(() => auth.can('orders.assign'))
 const canTake = computed(() => auth.can('orders.take'))
+// Only owner / accountant may undo an accidental cancel.
+const canRestore = computed(() => auth.role === 'OWNER' || auth.role === 'ACCOUNTANT')
 
 const busy = ref(false)
 async function run(fn: () => Promise<unknown>, ok: string) {
@@ -39,6 +41,11 @@ async function run(fn: () => Promise<unknown>, ok: string) {
 }
 
 const changeStatus = (s: OrderStatus) => run(() => ordersApi.setStatus(id, s), 'Статус обновлён')
+// Statuses an accidentally-cancelled order can be brought back to.
+const RESTORE_TARGETS: OrderStatus[] = ['NEW', 'QUEUED', 'ASSIGNED', 'IN_PROGRESS', 'AWAITING_PAYMENT', 'READY']
+const restoreItems = RESTORE_TARGETS.map(s => ({ label: ORDER_STATUS_LABEL[s], value: s }))
+const restoreTo = ref<OrderStatus>('AWAITING_PAYMENT')
+const restore = () => run(() => ordersApi.restore(id, restoreTo.value), 'Заказ восстановлен')
 const take = () => run(() => ordersApi.take(id), 'Заказ взят')
 const assignAuto = () => run(() => ordersApi.assignAuto(id), 'Мойщик назначен')
 
@@ -322,6 +329,28 @@ const editable = computed(() => order.value && !['COMPLETED', 'CANCELLED'].inclu
                 :loading="busy"
                 @click="changeStatus(s)"
               />
+            </div>
+
+            <div
+              v-if="canRestore && order.status === 'CANCELLED'"
+              class="rounded-lg border border-warning/40 bg-warning/5 p-3 space-y-2"
+            >
+              <p class="text-xs text-muted">
+                Заказ отменён. Можно восстановить в активный статус — деньги в кассу не заводятся,
+                оплата проводится штатно кассиром.
+              </p>
+              <div class="flex gap-2">
+                <USelect v-model="restoreTo" :items="restoreItems" value-key="value" size="sm" class="flex-1" />
+                <UButton
+                  size="sm"
+                  color="warning"
+                  variant="soft"
+                  icon="i-lucide-rotate-ccw"
+                  label="Восстановить"
+                  :loading="busy"
+                  @click="restore"
+                />
+              </div>
             </div>
 
             <UButton
